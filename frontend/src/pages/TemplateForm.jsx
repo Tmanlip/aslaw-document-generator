@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Copy, Check, Loader2, FileText, FileDown } from "lucide-react";
 import { templates } from "../data/templates";
+import { deterministicTemplateBuilders } from "../components/templates/builders";
+import { renderGeneratedPreview } from "../components/templates/previews/renderGeneratedPreview";
+import TemplateEditorCard from "../components/templates/ui/TemplateEditorCard";
+import TemplatePreviewCard from "../components/templates/ui/TemplatePreviewCard";
 
 import jsPDF from "jspdf";
 import { Document, Packer, Paragraph } from "docx";
@@ -49,6 +52,37 @@ const TemplateForm = () => {
     setError("");
 
     try {
+      const deterministicBuilder = deterministicTemplateBuilders[template.id];
+      if (deterministicBuilder) {
+        setGeneratedContent(deterministicBuilder(formData));
+        setShowPreview(true);
+
+        const silentDataSyncEndpointByTemplateId = {
+          "formal-letter": "http://localhost:3001/generate-lod-data-xlsx",
+          "writ-of-summons": "http://localhost:3001/generate-writ-data-xlsx",
+        };
+
+        const syncEndpoint = silentDataSyncEndpointByTemplateId[template.id];
+        if (syncEndpoint) {
+          fetch(syncEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ formData }),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error("Failed to sync template workbook");
+              }
+              return response.json();
+            })
+            .catch((syncError) => {
+              console.error("Template data sync failed:", syncError);
+            });
+        }
+
+        return;
+      }
+
       const prompt = template.generate(formData);
 
       const res = await fetch("http://localhost:3001/generate", {
@@ -91,6 +125,42 @@ const TemplateForm = () => {
 
   /* ===== EXPORT DOCX ===== */
   const handleExportDOCX = async () => {
+    const templateDocxEndpointById = {
+      "formal-letter": {
+        endpoint: "http://localhost:3001/generate-lod-docx",
+        filename: "LOD_Template.docx",
+        errorText: "Failed to export LOD DOCX. Make sure backend is running.",
+      },
+      "writ-of-summons": {
+        endpoint: "http://localhost:3001/generate-writ-docx",
+        filename: "Writ_of_Summons_Template.docx",
+        errorText: "Failed to export Writ DOCX. Make sure backend is running.",
+      },
+    };
+
+    const templateDocxConfig = templateDocxEndpointById[template.id];
+    if (templateDocxConfig) {
+      try {
+        const response = await fetch(templateDocxConfig.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ formData }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to generate template DOCX");
+        }
+
+        const blob = await response.blob();
+        saveAs(blob, templateDocxConfig.filename);
+      } catch (err) {
+        console.error(err);
+        setError(templateDocxConfig.errorText);
+      }
+
+      return;
+    }
+
     const doc = new Document({
       sections: [
         {
@@ -108,120 +178,28 @@ const TemplateForm = () => {
   /* ================= PREVIEW ================= */
   if (showPreview) {
     return (
-      <div className="min-h-screen px-4 py-12 bg-gray-50">
-        <div className="max-w-3xl mx-auto">
-          <button
-            onClick={() => setShowPreview(false)}
-            className="flex items-center mb-6 text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Back to edit
-          </button>
-
-          <div className="overflow-hidden bg-white rounded-lg shadow-lg">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b">
-              <h2 className="text-xl font-semibold">Generated Result</h2>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCopy}
-                  className="flex items-center px-3 py-2 text-sm text-white bg-blue-600 rounded-md"
-                >
-                  {copied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-                  {copied ? "Copied" : "Copy"}
-                </button>
-
-                <button
-                  onClick={handleExportPDF}
-                  className="flex items-center px-3 py-2 text-sm text-white bg-green-600 rounded-md"
-                >
-                  <FileDown className="w-4 h-4 mr-1" />
-                  PDF
-                </button>
-
-                <button
-                  onClick={handleExportDOCX}
-                  className="flex items-center px-3 py-2 text-sm text-white bg-purple-600 rounded-md"
-                >
-                  <FileText className="w-4 h-4 mr-1" />
-                  DOCX
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 bg-gray-50">
-              <pre className="p-6 whitespace-pre-wrap bg-white border rounded-md">
-                {generatedContent}
-              </pre>
-            </div>
-          </div>
-        </div>
-      </div>
+      <TemplatePreviewCard
+        copied={copied}
+        onBackToEdit={() => setShowPreview(false)}
+        onCopy={handleCopy}
+        onExportPDF={handleExportPDF}
+        onExportDOCX={handleExportDOCX}
+      >
+        {renderGeneratedPreview(template.id, generatedContent)}
+      </TemplatePreviewCard>
     );
   }
 
   /* ================= FORM ================= */
   return (
-    <div className="min-h-screen px-4 py-12 bg-gray-50">
-      <div className="max-w-2xl mx-auto">
-        <Link to="/" className="flex items-center mb-6 text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="w-5 h-5 mr-2" />
-          Back to Dashboard
-        </Link>
-
-        <div className="bg-white rounded-lg shadow-lg">
-          <div className="px-6 py-8 border-b">
-            <h1 className="text-2xl font-bold">{template.title}</h1>
-            <p className="mt-2 text-gray-600">{template.description}</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {template.fields.map(field => (
-              <div key={field.name}>
-                <label className="block text-sm font-medium">{field.label}</label>
-
-                {field.type === "textarea" ? (
-                  <textarea
-                    name={field.name}
-                    rows={4}
-                    required
-                    value={formData[field.name] || ""}
-                    onChange={handleChange}
-                    className="block w-full p-2 mt-1 border rounded-md"
-                  />
-                ) : (
-                  <input
-                    type={field.type}
-                    name={field.name}
-                    required
-                    value={formData[field.name] || ""}
-                    onChange={handleChange}
-                    className="block w-full p-2 mt-1 border rounded-md"
-                  />
-                )}
-              </div>
-            ))}
-
-            {error && <div className="text-sm text-red-600">{error}</div>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center justify-center w-full px-4 py-2 text-white bg-blue-600 rounded-md"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                "Generate with AI"
-              )}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+    <TemplateEditorCard
+      template={template}
+      formData={formData}
+      loading={loading}
+      error={error}
+      onChange={handleChange}
+      onSubmit={handleSubmit}
+    />
   );
 };
 
