@@ -20,6 +20,7 @@ const TemplateForm = () => {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("english");
 
   // Initialize form data
   useEffect(() => {
@@ -54,7 +55,7 @@ const TemplateForm = () => {
     try {
       const deterministicBuilder = deterministicTemplateBuilders[template.id];
       if (deterministicBuilder) {
-        setGeneratedContent(deterministicBuilder(formData));
+        setGeneratedContent(deterministicBuilder(formData, selectedLanguage));
         setShowPreview(true);
 
         const silentDataSyncEndpointByTemplateId = {
@@ -83,12 +84,16 @@ const TemplateForm = () => {
         return;
       }
 
-      const prompt = template.generate(formData);
+      const languageInstruction = selectedLanguage === "malay"
+        ? "Write the output in formal Malay (Bahasa Melayu) with professional grammar and vocabulary."
+        : "Write the output in formal English with professional grammar and vocabulary.";
+
+      const prompt = `${template.generate(formData)}\n\n${languageInstruction}\nMaintain a professional and formal tone throughout.`;
 
       const res = await fetch("http://localhost:3001/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, language: selectedLanguage }),
       });
 
       if (!res.ok) throw new Error("AI generation failed");
@@ -144,7 +149,7 @@ const TemplateForm = () => {
         const response = await fetch(templateDocxConfig.endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ formData }),
+          body: JSON.stringify({ formData, language: selectedLanguage }),
         });
 
         if (!response.ok) {
@@ -195,9 +200,11 @@ const TemplateForm = () => {
     <TemplateEditorCard
       template={template}
       formData={formData}
+      selectedLanguage={selectedLanguage}
       loading={loading}
       error={error}
       onChange={handleChange}
+      onLanguageChange={setSelectedLanguage}
       onSubmit={handleSubmit}
     />
   );

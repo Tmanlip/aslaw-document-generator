@@ -14,6 +14,10 @@ export const cleanLine = (value, fallback = "N/A") => {
   return text || fallback;
 };
 
+export const chooseByLanguage = (language, englishText, malayText) => {
+  return language === "malay" ? malayText : englishText;
+};
+
 export const formatNumberedList = (items) => {
   if (items.length === 0) {
     return "1. N/A";

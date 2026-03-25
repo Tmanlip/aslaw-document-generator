@@ -106,6 +106,71 @@ const escapeXml = (value) =>
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const normalizeLanguage = (language) => {
+  const value = `${language ?? ""}`.trim().toLowerCase();
+  return value === "malay" ? "malay" : "english";
+};
+
+const replaceAllLiteral = (source, searchValue, replacementValue) =>
+  source.split(searchValue).join(replacementValue);
+
+const localizeLodDocxXml = (xml, language) => {
+  if (normalizeLanguage(language) !== "malay") {
+    return xml;
+  }
+
+  const replacements = [
+    ["Ref: {{subject}}", "Ruj: {{subject}}"],
+    ["LETTER OF DEMAND: {{subject}}", "Ruj: {{subject}}"],
+    ["Dear Sir/Madam,", "Tuan/Puan,"],
+    ["Dear {{RecipientSalutation}},", "Tuan/Puan,"],
+    [
+      "We refer to the outstanding sum of {{Currency}} {{AmountDue}} owing to {{senderName}} for {{body}} under {{AgreementType}} dated {{AgreementDate}} (Invoice: {{InvoiceNumber}}; Due date: {{DueDate}}).",
+      "Merujuk kepada perkara di atas, kami bertindak bagi pihak Anakguam kami. Adalah dimaklumkan bahawa pihak kami telah diarahkan untuk menyatakan seperti berikut: {{body}}.",
+    ],
+    [
+      "Despite our previous reminders dated {{ReminderDates}}, the above amount remains unpaid.",
+      "Penyebaran fitnah oleh pihak Tuan/Puan terhadap Anakguam kami telah menyebabkan kerugian reputasi dan perniagaan yang serius.",
+    ],
+    [
+      "You are hereby formally required to settle the full outstanding sum within {{PaymentWindowDays}} days from the date of this letter, that is, on or before {{FinalPaymentDate}}.",
+      "SILA AMBIL PERHATIAN bahawa kami menuntut pihak Tuan/Puan dalam masa {{PaymentWindowDays}} hari dari tarikh surat ini untuk memadam kenyataan fitnah, menerbitkan akujanji tidak mengulangi fitnah, mengemukakan draf permohonan maaf, dan melaksanakan penyiaran permohonan maaf setelah diluluskan.",
+    ],
+    [
+      "Failing payment by the stipulated deadline, we reserve all rights to commence legal proceedings without further notice, and to claim all additional costs, interest, and expenses incurred.",
+      "Kami turut menuntut gantirugi sebanyak {{Currency}} {{AmountDue}} dan jika pihak Tuan/Puan gagal mematuhi tuntutan ini, kami mempunyai arahan tegas Anakguam kami untuk memfailkan tindakan sivil di Mahkamah tanpa notis lanjut.",
+    ],
+    [
+      "Payment shall be made to {{PaymentInstructions}} and remittance advice shall be emailed to {{RemittanceEmail}}. Should you dispute any part of this demand, written particulars of such dispute must be provided to {{senderName}} at {{ContactPhone}} / {{ContactEmail}} within {{DisputeWindowDays}} days.",
+      "Tuntutan-tuntutan di atas dibuat tanpa prasangka terhadap hak-hak dan remedi Anakguam kami, yang kesemuanya adalah terpelihara.",
+    ],
+    [
+      "Please arrange payment to {{PaymentInstructions}} and email the remittance advice to {{RemittanceEmail}}. If you dispute any part of this demand, contact {{senderName}} at {{ContactPhone}} / {{ContactEmail}} within {{DisputeWindowDays}} days.",
+      "Sila buat pembayaran kepada {{PaymentInstructions}} dan e-melkan bukti pembayaran kepada {{RemittanceEmail}}. Sekiranya pihak tuan/puan mempertikaikan mana-mana bahagian tuntutan ini, sila hubungi {{senderName}} di {{ContactPhone}} / {{ContactEmail}} dalam tempoh {{DisputeWindowDays}} hari.",
+    ],
+    [
+      "WITHOUT PREJUDICE. This letter is issued without prejudice to our client's rights and remedies, all of which are expressly reserved.",
+      "TANPA PREJUDIS. Surat ini dikeluarkan tanpa prejudis kepada hak dan remedi pelanggan kami, yang kesemuanya adalah terpelihara.",
+    ],
+    [
+      "WITHOUT PREJUDICE. This letter is issued without prejudice to our clientâ€™s rights and remedies, all of which are expressly reserved.",
+      "TANPA PREJUDIS. Surat ini dikeluarkan tanpa prejudis kepada hak dan remedi pelanggan kami, yang kesemuanya adalah terpelihara.",
+    ],
+    [
+      "This letter is issued without prejudice to our clientâ€™s rights and remedies, all of which are expressly reserved.",
+      "Surat ini dikeluarkan tanpa prejudis kepada hak dan remedi pelanggan kami, yang kesemuanya adalah terpelihara.",
+    ],
+    ["Sincerely,", "Yang benar,"],
+    ["Yours faithfully,", "Yang benar,"],
+  ];
+
+  return replacements.reduce(
+    (localizedXml, [searchValue, replacementValue]) =>
+      replaceAllLiteral(localizedXml, searchValue, replacementValue),
+    xml,
+  );
+};
+
 const resolveLodPath = async (candidates) => {
   for (const fileName of candidates) {
     const absolutePath = path.resolve(lodTemplateDir, fileName);
@@ -132,6 +197,23 @@ const columnIndexToLetters = (index) => {
   }
 
   return letters;
+};
+
+const buildDefamationBodyFromForm = (formData = {}, defaultBody = "") => {
+  const sections = [
+    normalizeText(formData.BackgroundFacts, ""),
+    normalizeText(formData.DefamationActs, ""),
+    normalizeText(formData.DefamatoryStatementsDetails, ""),
+    normalizeText(formData.ImageUploadDetails, ""),
+    normalizeText(formData.AdditionalPublicationDetails, ""),
+    normalizeText(formData.ReshareDetails, ""),
+  ].filter(Boolean);
+
+  if (sections.length === 0) {
+    return defaultBody;
+  }
+
+  return sections.join("; ");
 };
 
 const buildLodVariables = (formData = {}) => {
@@ -231,9 +313,22 @@ const buildLodVariables = (formData = {}) => {
     YourSignerTitle: pickField("YourSignerTitle", null, lodFallback.YourSignerTitle),
   };
 
+  const defamationFields = {
+    ClientName: pickField("ClientName", null, "Anakguam kami"),
+    ClientServiceAddress: pickField("ClientServiceAddress", null, "-"),
+    BackgroundFacts: pickField("BackgroundFacts", null, ""),
+    DefamationActs: pickField("DefamationActs", null, ""),
+    DefamatoryStatementsDetails: pickField("DefamatoryStatementsDetails", null, ""),
+    ImageUploadDetails: pickField("ImageUploadDetails", null, ""),
+    AdditionalPublicationDetails: pickField("AdditionalPublicationDetails", null, ""),
+    ReshareDetails: pickField("ReshareDetails", null, ""),
+    MainSocialAccount: pickField("MainSocialAccount", null, "-"),
+  };
+
   const merged = {
     ...lodFallback,
     ...fromForm,
+    ...defamationFields,
   };
 
   return {
@@ -249,7 +344,7 @@ const buildLodVariables = (formData = {}) => {
       merged.RecipientAddressLine2 ? `, ${merged.RecipientAddressLine2}` : ""
     }`,
     subject: merged.Reference,
-    body: merged.GoodsOrServices,
+    body: buildDefamationBodyFromForm(formData, merged.GoodsOrServices),
   };
 };
 
@@ -290,7 +385,7 @@ const buildFilledLodDataWorkbook = async (formData = {}) => {
   await fs.writeFile(outputPath, outputBuffer);
 };
 
-const generateLodDocxBuffer = async (formData = {}) => {
+const generateLodDocxBuffer = async (formData = {}, language = "english") => {
   const variables = buildLodVariables(formData);
   const templatePath = await resolveLodPath([
     "LOD_Template.docx",
@@ -310,6 +405,7 @@ const generateLodDocxBuffer = async (formData = {}) => {
   }
 
   let xml = await documentFile.async("string");
+  xml = localizeLodDocxXml(xml, language);
 
   for (const [key, rawValue] of Object.entries(variables)) {
     const token = new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, "g");
@@ -335,7 +431,8 @@ export const registerLodTemplateRoutes = (app) => {
   app.post("/generate-lod-docx", async (req, res) => {
     try {
       const formData = req.body?.formData ?? {};
-      const outputBuffer = await generateLodDocxBuffer(formData);
+      const language = req.body?.language ?? "english";
+      const outputBuffer = await generateLodDocxBuffer(formData, language);
 
       res.setHeader(
         "Content-Type",

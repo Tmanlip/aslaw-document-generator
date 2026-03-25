@@ -6,9 +6,11 @@ import TemplateFields from "./TemplateFields";
 const TemplateEditorCard = ({
   template,
   formData,
+  selectedLanguage,
   loading,
   error,
   onChange,
+  onLanguageChange,
   onSubmit,
 }) => {
   return (
@@ -26,6 +28,26 @@ const TemplateEditorCard = ({
           </div>
 
           <form onSubmit={onSubmit} className="p-6 space-y-6">
+            <div>
+              <p className="mb-2 text-sm font-medium text-gray-700">Document Language</p>
+              <div className="inline-flex p-1 rounded-md bg-gray-100">
+                <button
+                  type="button"
+                  onClick={() => onLanguageChange("english")}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${selectedLanguage === "english" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onLanguageChange("malay")}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${selectedLanguage === "malay" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                >
+                  Malay
+                </button>
+              </div>
+            </div>
+
             <TemplateFields fields={template.fields} formData={formData} onChange={onChange} />
 
             {error && <div className="text-sm text-red-600">{error}</div>}

@@ -1,6 +1,12 @@
 export const registerAiGenerateRoute = (app) => {
   app.post("/generate", async (req, res) => {
-    const { prompt } = req.body;
+    const { prompt, language = "english" } = req.body;
+
+    const languageInstruction = language === "malay"
+      ? "Respond in formal Malay (Bahasa Melayu) using professional grammar and tone."
+      : "Respond in formal English using professional grammar and tone.";
+
+    const finalPrompt = `${languageInstruction}\n\n${prompt}`;
 
     try {
       const response = await fetch("http://127.0.0.1:11434/api/generate", {
@@ -10,7 +16,7 @@ export const registerAiGenerateRoute = (app) => {
         },
         body: JSON.stringify({
           model: "llama3",
-          prompt,
+          prompt: finalPrompt,
           stream: false,
         }),
       });

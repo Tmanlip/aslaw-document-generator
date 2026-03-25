@@ -20,7 +20,13 @@ const LegalDocumentPreview = ({ content }) => {
           || trimmed.startsWith("Appearance must be entered within")
           || trimmed.startsWith("Hearing Date:")
           || trimmed.startsWith("LETTER OF DEMAND:")
+          || trimmed.startsWith("Ref:")
+          || trimmed.startsWith("Ruj:")
+          || trimmed.startsWith("RE:")
+          || trimmed.startsWith("PER:")
+          || trimmed === "WITHOUT PREJUDICE"
           || trimmed.startsWith("Dear ")
+          || trimmed.startsWith("Tuan/Puan")
           || trimmed === "Sincerely,";
 
         if (isMainTitle) {
