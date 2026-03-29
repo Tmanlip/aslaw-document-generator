@@ -6,20 +6,23 @@ import { registerWritTemplateRoutes } from "./components/writTemplateComponent.j
 
 const app = express();
 
-const allowedOrigins = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://localhost:5174",
-  "http://127.0.0.1:5174",
-]);
-
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow non-browser clients and explicitly allow known local frontend origins.
-      if (!origin || allowedOrigins.has(origin)) {
+      // Allow non-browser clients and local development origins on any port.
+      if (!origin) {
         callback(null, true);
         return;
+      }
+
+      try {
+        const { hostname } = new URL(origin);
+        if (hostname === "localhost" || hostname === "127.0.0.1") {
+          callback(null, true);
+          return;
+        }
+      } catch {
+        // Keep handling below for malformed origins.
       }
 
       callback(new Error(`CORS blocked for origin: ${origin}`));
@@ -29,10 +32,40 @@ app.use(
 
 app.use(express.json());
 
+app.get("/health", async (_req, res) => {
+  try {
+    const ollamaResponse = await fetch("http://127.0.0.1:11434/api/tags", {
+      signal: AbortSignal.timeout(2500),
+    });
+
+    if (!ollamaResponse.ok) {
+      return res.status(503).json({
+        status: "degraded",
+        backend: "ok",
+        ollama: "error",
+        details: `Ollama responded with status ${ollamaResponse.status}`,
+      });
+    }
+
+    return res.json({
+      status: "ok",
+      backend: "ok",
+      ollama: "ok",
+    });
+  } catch (error) {
+    return res.status(503).json({
+      status: "degraded",
+      backend: "ok",
+      ollama: "unreachable",
+      details: error?.message || "Ollama connection failed",
+    });
+  }
+});
+
 registerLodTemplateRoutes(app);
 registerWritTemplateRoutes(app);
 registerAiGenerateRoute(app);
 
-app.listen(3001, () => {
-  console.log("🚀 AI server running on http://localhost:3001");
+app.listen(3002, () => {
+  console.log("🚀 AI server running on http://localhost:3002");
 });

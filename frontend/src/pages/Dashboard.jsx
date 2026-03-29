@@ -16,10 +16,10 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center">
           <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-            Template Generator
+            Choose the document you want to create
           </h1>
-          <p className="mt-4 text-xl text-gray-500">
-            Choose a template to get started
+          <p className="mt-4 text-lg text-gray-600">
+            Select a document template below to begin creating your legal document.
           </p>
         </div>
         <div className="mt-12 grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">

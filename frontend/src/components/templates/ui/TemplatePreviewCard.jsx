@@ -7,6 +7,7 @@ const TemplatePreviewCard = ({
   onCopy,
   onExportPDF,
   onExportDOCX,
+  syncStatusMessage,
   children,
 }) => {
   return (
@@ -50,6 +51,12 @@ const TemplatePreviewCard = ({
               </button>
             </div>
           </div>
+
+          {syncStatusMessage && (
+            <div className="px-6 py-3 text-sm border-b bg-amber-50 text-amber-800 border-amber-200">
+              {syncStatusMessage}
+            </div>
+          )}
 
           <div className="p-6 bg-gray-50">{children}</div>
         </div>

@@ -28,6 +28,7 @@ export const buildFormalLetter = (data, language = "english") => {
   const emailLabel = chooseByLanguage(language, "Email", "E-mel");
   const invoiceLabel = chooseByLanguage(language, "Invoice", "Invois");
   const dueDateLabel = chooseByLanguage(language, "Due date", "Tarikh akhir");
+  const closing = chooseByLanguage(language, "Sincerely,", "Yang benar,");
   const isMalay = language === "malay";
   const hasDefamation = isDefamationContent(data);
 
@@ -199,7 +200,6 @@ export const buildFormalLetter = (data, language = "english") => {
     ].join("\n");
   }
 
-  const closing = chooseByLanguage(language, "Sincerely,", "Yang benar,");
   const firstParagraph = chooseByLanguage(
     language,
     `We refer to the outstanding sum of ${cleanLine(data.Currency)} ${cleanLine(data.AmountDue)} owing to ${cleanLine(data.YourCompanyName)} for ${cleanLine(data.GoodsOrServices)} under ${cleanLine(data.AgreementType)} dated ${cleanLine(data.AgreementDate)} (${invoiceLabel}: ${cleanLine(data.InvoiceNumber)}; ${dueDateLabel}: ${cleanLine(data.DueDate)}).`,

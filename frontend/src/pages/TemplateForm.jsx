@@ -10,6 +10,8 @@ import jsPDF from "jspdf";
 import { Document, Packer, Paragraph } from "docx";
 import { saveAs } from "file-saver";
 
+const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3002";
+
 const TemplateForm = () => {
   const { id } = useParams();
   const template = templates.find(t => t.id === id);
@@ -20,6 +22,7 @@ const TemplateForm = () => {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [syncStatusMessage, setSyncStatusMessage] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState("english");
 
   // Initialize form data
@@ -47,10 +50,32 @@ const TemplateForm = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const syncTemplateWorkbook = async (endpointPath, payload) => {
+    try {
+      const response = await fetch(`${BACKEND_BASE_URL}${endpointPath}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        // This sync is optional and should not interrupt user flow.
+        return false;
+      }
+
+      await response.json();
+      return true;
+    } catch {
+      // Ignore connection issues for optional background sync.
+      return false;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSyncStatusMessage("");
 
     try {
       const deterministicBuilder = deterministicTemplateBuilders[template.id];
@@ -59,26 +84,17 @@ const TemplateForm = () => {
         setShowPreview(true);
 
         const silentDataSyncEndpointByTemplateId = {
-          "formal-letter": "http://localhost:3001/generate-lod-data-xlsx",
-          "writ-of-summons": "http://localhost:3001/generate-writ-data-xlsx",
+          "formal-letter": "/generate-lod-data-xlsx",
+          "writ-of-summons": "/generate-writ-data-xlsx",
         };
 
         const syncEndpoint = silentDataSyncEndpointByTemplateId[template.id];
         if (syncEndpoint) {
-          fetch(syncEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ formData }),
-          })
-            .then((response) => {
-              if (!response.ok) {
-                throw new Error("Failed to sync template workbook");
-              }
-              return response.json();
-            })
-            .catch((syncError) => {
-              console.error("Template data sync failed:", syncError);
-            });
+          void syncTemplateWorkbook(syncEndpoint, { formData }).then((syncSuccess) => {
+            if (!syncSuccess) {
+              setSyncStatusMessage("Workbook sync is unavailable right now. Continue using preview/export as usual.");
+            }
+          });
         }
 
         return;
@@ -90,13 +106,25 @@ const TemplateForm = () => {
 
       const prompt = `${template.generate(formData)}\n\n${languageInstruction}\nMaintain a professional and formal tone throughout.`;
 
-      const res = await fetch("http://localhost:3001/generate", {
+      const res = await fetch(`${BACKEND_BASE_URL}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, language: selectedLanguage }),
       });
 
-      if (!res.ok) throw new Error("AI generation failed");
+      if (!res.ok) {
+        let backendError = "AI generation failed";
+        try {
+          const errorPayload = await res.json();
+          if (errorPayload?.error) {
+            backendError = errorPayload.error;
+          }
+        } catch {
+          // Use fallback message when response body is not JSON.
+        }
+
+        throw new Error(backendError);
+      }
 
       const data = await res.json();
       setGeneratedContent(data.output);
@@ -104,7 +132,7 @@ const TemplateForm = () => {
 
     } catch (err) {
       console.error(err);
-      setError("Failed to generate content. Make sure backend & Ollama are running.");
+      setError(err?.message || "Failed to generate content. Make sure backend & Ollama are running.");
     } finally {
       setLoading(false);
     }
@@ -118,12 +146,44 @@ const TemplateForm = () => {
 
   /* ===== EXPORT PDF ===== */
   const handleExportPDF = () => {
-    const pdf = new jsPDF();
+    const pdf = new jsPDF({ unit: "mm", format: "a4" });
     pdf.setFont("Times", "Normal");
     pdf.setFontSize(12);
 
-    const text = pdf.splitTextToSize(generatedContent, 180);
-    pdf.text(text, 10, 20);
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const lineHeight = 6;
+    const maxLineWidth = pageWidth - (margin * 2);
+    const maxY = pageHeight - margin;
+
+    const paragraphs = generatedContent.split("\n");
+    let cursorY = margin;
+
+    paragraphs.forEach((paragraph, paragraphIndex) => {
+      const lines = paragraph.trim().length > 0
+        ? pdf.splitTextToSize(paragraph, maxLineWidth)
+        : [""];
+
+      lines.forEach((line) => {
+        if (cursorY > maxY) {
+          pdf.addPage();
+          cursorY = margin;
+        }
+
+        pdf.text(line, margin, cursorY);
+        cursorY += lineHeight;
+      });
+
+      if (paragraphIndex < paragraphs.length - 1) {
+        if (cursorY > maxY) {
+          pdf.addPage();
+          cursorY = margin;
+        } else {
+          cursorY += lineHeight;
+        }
+      }
+    });
 
     pdf.save(`${template.id}.pdf`);
   };
@@ -132,12 +192,12 @@ const TemplateForm = () => {
   const handleExportDOCX = async () => {
     const templateDocxEndpointById = {
       "formal-letter": {
-        endpoint: "http://localhost:3001/generate-lod-docx",
+        endpoint: `${BACKEND_BASE_URL}/generate-lod-docx`,
         filename: "LOD_Template.docx",
         errorText: "Failed to export LOD DOCX. Make sure backend is running.",
       },
       "writ-of-summons": {
-        endpoint: "http://localhost:3001/generate-writ-docx",
+        endpoint: `${BACKEND_BASE_URL}/generate-writ-docx`,
         filename: "Writ_of_Summons_Template.docx",
         errorText: "Failed to export Writ DOCX. Make sure backend is running.",
       },
@@ -189,6 +249,7 @@ const TemplateForm = () => {
         onCopy={handleCopy}
         onExportPDF={handleExportPDF}
         onExportDOCX={handleExportDOCX}
+        syncStatusMessage={syncStatusMessage}
       >
         {renderGeneratedPreview(template.id, generatedContent)}
       </TemplatePreviewCard>
